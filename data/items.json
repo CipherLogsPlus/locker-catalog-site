@@ -1,0 +1,62 @@
+[
+  {
+    "title": "Vintage Oak Dresser",
+    "price": "$120",
+    "category": "Furniture",
+    "condition": "Good",
+    "status": "Available",
+    "note": "Solid wood, all drawers slide smoothly.",
+    "mediaLabel": "Oak Dresser",
+    "image": ""
+  },
+  {
+    "title": "DeWalt Drill Set",
+    "price": "$65",
+    "category": "Tools",
+    "condition": "Tested",
+    "status": "Available",
+    "note": "Includes charger, 2 batteries, and carrying case.",
+    "mediaLabel": "Drill Set",
+    "image": ""
+  },
+  {
+    "title": "Samsung 50\" TV",
+    "price": "$180",
+    "category": "Electronics",
+    "condition": "Tested",
+    "status": "Available",
+    "note": "Clear picture and sound. Includes remote.",
+    "mediaLabel": "50in TV",
+    "image": ""
+  },
+  {
+    "title": "Mid-Century Accent Chair",
+    "price": "$95",
+    "category": "Furniture",
+    "condition": "Great",
+    "status": "Available",
+    "note": "Clean fabric with minor wear on legs.",
+    "mediaLabel": "Accent Chair",
+    "image": ""
+  },
+  {
+    "title": "KitchenAid Mixer",
+    "price": "$140",
+    "category": "Household",
+    "condition": "Tested",
+    "status": "Available",
+    "note": "5-quart bowl included. Runs smoothly.",
+    "mediaLabel": "Mixer",
+    "image": ""
+  },
+  {
+    "title": "Comic Lot (50 issues)",
+    "price": "$75",
+    "category": "Collectibles",
+    "condition": "Mixed",
+    "status": "Available",
+    "note": "Bagged comics from multiple series.",
+    "mediaLabel": "Comic Lot",
+    "image": ""
+  }
+]

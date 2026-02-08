@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Locker Finds Co. | Catalog Admin</title>
+  <meta name="description" content="Create and export catalog items JSON for Locker Finds Co.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="index.html">Locker Finds Co.</a>
+      <nav class="main-nav" aria-label="Primary">
+        <a href="index.html" data-nav-link>Home</a>
+        <a href="catalog.html" data-nav-link>Catalog</a>
+        <a href="admin.html" data-nav-link>Admin</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="catalog-header">
+        <p class="eyebrow">Catalog Admin</p>
+        <h1>Add New Items Fast</h1>
+        <p class="lead">Build your item list here, download `items.json`, replace `data/items.json`, then run `git push`.</p>
+      </section>
+
+      <section class="admin-panel">
+        <h2>Add Item</h2>
+        <form id="itemForm" class="admin-form" autocomplete="off">
+          <label class="form-field">
+            <span>Title *</span>
+            <input id="title" name="title" type="text" required>
+          </label>
+
+          <label class="form-field">
+            <span>Price *</span>
+            <input id="price" name="price" type="text" placeholder="$125" required>
+          </label>
+
+          <label class="form-field">
+            <span>Category</span>
+            <input id="category" name="category" type="text" placeholder="Furniture">
+          </label>
+
+          <label class="form-field">
+            <span>Condition</span>
+            <input id="condition" name="condition" type="text" placeholder="Tested">
+          </label>
+
+          <label class="form-field">
+            <span>Status</span>
+            <input id="status" name="status" type="text" value="Available">
+          </label>
+
+          <label class="form-field">
+            <span>Image Path (optional)</span>
+            <input id="image" name="image" type="text" placeholder="assets/items/drill-set.jpg">
+          </label>
+
+          <label class="form-field form-span-2">
+            <span>Short Label (if no image)</span>
+            <input id="mediaLabel" name="mediaLabel" type="text" placeholder="Drill Set">
+          </label>
+
+          <label class="form-field form-span-2">
+            <span>Item Note</span>
+            <textarea id="note" name="note" rows="3" placeholder="Quick details buyers should know"></textarea>
+          </label>
+
+          <div class="form-actions form-span-2">
+            <button type="submit" class="primary-btn">Add Item</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="admin-panel">
+        <h2>Draft Items <span class="count-badge" id="itemCount">0</span></h2>
+        <p class="admin-help">Newly added items appear first. Remove anything you do not want before downloading.</p>
+
+        <div class="admin-actions">
+          <button type="button" class="ghost-btn" id="reloadBtn">Reload From Site</button>
+          <button type="button" class="ghost-btn" id="downloadBtn">Download items.json</button>
+        </div>
+
+        <p id="adminMessage" class="admin-message" aria-live="polite"></p>
+        <div id="itemList" class="admin-list"></div>
+      </section>
+
+      <section class="admin-panel">
+        <h2>Publish Steps</h2>
+        <ol class="publish-steps">
+          <li>Download the JSON file from this page.</li>
+          <li>Replace `data/items.json` in your local project folder.</li>
+          <li>Place any item photos in `assets/items/` and set matching image paths.</li>
+          <li>Run: `git add . && git commit -m "Update catalog" && git push`</li>
+        </ol>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© <span id="year"></span> Locker Finds Co.</p>
+    </footer>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
