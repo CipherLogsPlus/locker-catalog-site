@@ -88,7 +88,7 @@ function escapeHtml(value) {
 
 async function loadCatalogItems() {
   try {
-    const response = await fetch("data/items.json", { cache: "no-store" });
+    const response = await fetch(`data/items.json?ts=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
