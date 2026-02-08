@@ -13,9 +13,13 @@ Open:
 - Live: `https://cipherlogsplus.github.io/locker-catalog-site/admin.html`
 
 Fast workflow (no local git commands):
-1. Add items in `admin.html`.
+1. Add items in `admin.html` and choose an image file (optional).
 2. In `Publish Live`, enter your GitHub token and click `Publish Live to Website`.
 3. Wait about 30-90 seconds for GitHub Pages to rebuild.
+
+Image behavior:
+- If you choose a file, `Publish Live` uploads it to `assets/items/` automatically.
+- If you skip file upload, you can still use `Image URL/Path` manually.
 
 Token requirements:
 - Fine-grained PAT

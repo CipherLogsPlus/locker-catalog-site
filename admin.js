@@ -1,8 +1,11 @@
 const STORE_KEY = "locker_catalog_admin_items";
 const PUBLISH_SETTINGS_KEY = "locker_catalog_publish_settings";
 const PUBLISH_PATH = "data/items.json";
+const IMAGE_DIRECTORY = "assets/items";
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 let draftItems = [];
+const pendingImageFiles = new Map();
 
 function setYear() {
   document.querySelectorAll("#year").forEach((el) => {
@@ -35,8 +38,50 @@ function showMessage(text) {
   }
 }
 
+function createItemId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return `item-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+}
+
+function normalizeCatalogItem(raw) {
+  const source = raw || {};
+  return {
+    id: typeof source.id === "string" && source.id ? source.id : createItemId(),
+    title: String(source.title || "").trim(),
+    price: String(source.price || "").trim(),
+    category: String(source.category || "General").trim() || "General",
+    condition: String(source.condition || "As-is").trim() || "As-is",
+    status: String(source.status || "Available").trim() || "Available",
+    note: String(source.note || "").trim(),
+    mediaLabel: String(source.mediaLabel || source.title || "Item Photo").trim() || "Item Photo",
+    image: String(source.image || "").trim()
+  };
+}
+
+function toCatalogItem(item) {
+  return {
+    title: item.title,
+    price: item.price,
+    category: item.category,
+    condition: item.condition,
+    status: item.status,
+    note: item.note,
+    mediaLabel: item.mediaLabel,
+    image: item.image
+  };
+}
+
+function serializeDraftForStorage() {
+  return draftItems.map((item) => ({
+    id: item.id,
+    ...toCatalogItem(item)
+  }));
+}
+
 function saveDraftToStorage() {
-  localStorage.setItem(STORE_KEY, JSON.stringify(draftItems));
+  localStorage.setItem(STORE_KEY, JSON.stringify(serializeDraftForStorage()));
 }
 
 function loadDraftFromStorage() {
@@ -48,7 +93,7 @@ function loadDraftFromStorage() {
   try {
     const parsed = JSON.parse(saved);
     if (Array.isArray(parsed)) {
-      draftItems = parsed;
+      draftItems = parsed.map(normalizeCatalogItem);
       return true;
     }
   } catch (error) {
@@ -168,6 +213,19 @@ function toBase64Utf8(content) {
   return btoa(binary);
 }
 
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return btoa(binary);
+}
+
+async function fileToBase64(file) {
+  const buffer = await file.arrayBuffer();
+  return bytesToBase64(new Uint8Array(buffer));
+}
+
 function githubHeaders(token) {
   return {
     Accept: "application/vnd.github+json",
@@ -185,6 +243,68 @@ async function parseJsonSafe(response) {
   }
 }
 
+function encodeRepoPath(path) {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function buildContentsUrl(owner, repo, path, branch) {
+  const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeRepoPath(path)}`;
+  if (!branch) {
+    return base;
+  }
+  return `${base}?ref=${encodeURIComponent(branch)}`;
+}
+
+async function fetchFileSha(owner, repo, branch, token, path) {
+  const response = await fetch(buildContentsUrl(owner, repo, path, branch), {
+    method: "GET",
+    headers: githubHeaders(token)
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await parseJsonSafe(response);
+  if (!response.ok) {
+    const message = data?.message || `Could not read ${path} (HTTP ${response.status}).`;
+    throw new Error(message);
+  }
+
+  return data?.sha || null;
+}
+
+async function putRepoFile({ owner, repo, branch, token, path, contentBase64, message }) {
+  const sha = await fetchFileSha(owner, repo, branch, token, path);
+  const payload = {
+    message,
+    content: contentBase64,
+    branch
+  };
+
+  if (sha) {
+    payload.sha = sha;
+  }
+
+  const response = await fetch(buildContentsUrl(owner, repo, path), {
+    method: "PUT",
+    headers: githubHeaders(token),
+    body: JSON.stringify(payload)
+  });
+
+  const data = await parseJsonSafe(response);
+  if (!response.ok) {
+    const messageText = data?.message || `Could not write ${path} (HTTP ${response.status}).`;
+    throw new Error(messageText);
+  }
+
+  return data;
+}
+
 async function loadItemsFromSite() {
   const response = await fetch(`data/items.json?ts=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) {
@@ -196,8 +316,81 @@ async function loadItemsFromSite() {
     throw new Error("items.json is not an array");
   }
 
-  draftItems = payload;
+  draftItems = payload.map(normalizeCatalogItem);
   saveDraftToStorage();
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+function inferImageExtension(file) {
+  const name = String(file.name || "");
+  const nameMatch = name.match(/\.([a-zA-Z0-9]+)$/);
+  if (nameMatch) {
+    return `.${nameMatch[1].toLowerCase()}`;
+  }
+
+  const type = String(file.type || "").toLowerCase();
+  if (type === "image/png") {
+    return ".png";
+  }
+  if (type === "image/webp") {
+    return ".webp";
+  }
+  if (type === "image/gif") {
+    return ".gif";
+  }
+  return ".jpg";
+}
+
+function clearPendingImage(itemId) {
+  const pending = pendingImageFiles.get(itemId);
+  if (pending && pending.previewUrl) {
+    URL.revokeObjectURL(pending.previewUrl);
+  }
+  pendingImageFiles.delete(itemId);
+}
+
+function queueImageFile(itemId, title, file) {
+  if (!(file instanceof File) || file.size === 0) {
+    return null;
+  }
+
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error("Image is too large. Keep image files under 8 MB.");
+  }
+
+  clearPendingImage(itemId);
+
+  const baseName = slugify(title) || "item";
+  const ext = inferImageExtension(file);
+  const unique = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  const fileName = `${baseName}-${unique}${ext}`;
+  const repoPath = `${IMAGE_DIRECTORY}/${fileName}`;
+  const previewUrl = URL.createObjectURL(file);
+
+  pendingImageFiles.set(itemId, {
+    file,
+    repoPath,
+    previewUrl
+  });
+
+  return repoPath;
+}
+
+function countPendingImages() {
+  let count = 0;
+  draftItems.forEach((item) => {
+    if (pendingImageFiles.has(item.id)) {
+      count += 1;
+    }
+  });
+  return count;
 }
 
 function renderItems() {
@@ -225,10 +418,15 @@ function renderItems() {
       const note = safeText(item.note || "");
       const image = typeof item.image === "string" ? item.image.trim() : "";
       const label = safeText(item.mediaLabel || item.title || "Item Photo");
+      const pending = pendingImageFiles.get(item.id);
+      const pendingText = pending ? " | Image queued" : "";
 
-      const media = image
-        ? `<img src="${safeText(image)}" alt="${title}" loading="lazy">`
-        : label;
+      let media = label;
+      if (image) {
+        media = `<img src="${safeText(image)}" alt="${title}" loading="lazy">`;
+      } else if (pending?.previewUrl) {
+        media = `<img src="${safeText(pending.previewUrl)}" alt="${title}" loading="lazy">`;
+      }
 
       return `
         <article class="admin-item" data-index="${index}">
@@ -236,7 +434,7 @@ function renderItems() {
           <div class="admin-item-body">
             <h3>${title}</h3>
             <p class="admin-item-price">${price}</p>
-            <p class="admin-item-meta">${category} | ${condition} | ${status}</p>
+            <p class="admin-item-meta">${category} | ${condition} | ${status}${pendingText}</p>
             <p class="admin-item-note">${note}</p>
             <button type="button" class="remove-btn" data-remove="${index}">Remove</button>
           </div>
@@ -246,7 +444,16 @@ function renderItems() {
     .join("");
 }
 
-function addItemFromForm(event) {
+function resetAddItemForm(form) {
+  form.reset();
+
+  const statusInput = document.getElementById("status");
+  if (statusInput instanceof HTMLInputElement) {
+    statusInput.value = "Available";
+  }
+}
+
+async function addItemFromForm(event) {
   event.preventDefault();
 
   const form = event.currentTarget;
@@ -260,7 +467,8 @@ function addItemFromForm(event) {
     return;
   }
 
-  const item = {
+  const item = normalizeCatalogItem({
+    id: createItemId(),
     title,
     price,
     category: String(formData.get("category") || "General").trim() || "General",
@@ -269,17 +477,32 @@ function addItemFromForm(event) {
     note: String(formData.get("note") || "").trim(),
     mediaLabel: String(formData.get("mediaLabel") || title).trim() || title,
     image: String(formData.get("image") || "").trim()
-  };
+  });
+
+  const imageFile = formData.get("imageFile");
+  let queuedImage = false;
+
+  try {
+    if (imageFile instanceof File && imageFile.size > 0) {
+      item.image = "";
+      queueImageFile(item.id, title, imageFile);
+      queuedImage = true;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not queue image upload.";
+    showMessage(message);
+    return;
+  }
 
   draftItems.unshift(item);
   saveDraftToStorage();
   renderItems();
-  showMessage(`Added "${title}" to draft.`);
-  form.reset();
+  resetAddItemForm(form);
 
-  const statusInput = document.getElementById("status");
-  if (statusInput) {
-    statusInput.value = "Available";
+  if (queuedImage) {
+    showMessage(`Added "${title}". Image queued for upload. Click Publish Live to upload it.`);
+  } else {
+    showMessage(`Added "${title}" to draft.`);
   }
 }
 
@@ -289,13 +512,17 @@ function removeItem(index) {
   }
 
   const [removed] = draftItems.splice(index, 1);
+  if (removed?.id) {
+    clearPendingImage(removed.id);
+  }
   saveDraftToStorage();
   renderItems();
-  showMessage(`Removed "${removed.title || "item"}".`);
+  showMessage(`Removed "${removed?.title || "item"}".`);
 }
 
 function downloadDraftJson() {
-  const output = `${JSON.stringify(draftItems, null, 2)}\n`;
+  const outputItems = draftItems.map(toCatalogItem);
+  const output = `${JSON.stringify(outputItems, null, 2)}\n`;
   const blob = new Blob([output], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -307,27 +534,42 @@ function downloadDraftJson() {
   link.remove();
 
   URL.revokeObjectURL(url);
+
+  const pendingCount = countPendingImages();
+  if (pendingCount > 0) {
+    showMessage(`Downloaded items.json. ${pendingCount} queued image(s) upload only when you click Publish Live.`);
+    return;
+  }
+
   showMessage("Downloaded items.json. You can publish with the button below or via git push.");
 }
 
-async function fetchExistingItemsFileSha(owner, repo, branch, token) {
-  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${PUBLISH_PATH}?ref=${encodeURIComponent(branch)}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: githubHeaders(token)
-  });
+async function uploadPendingImages(owner, repo, branch, token) {
+  let uploaded = 0;
 
-  if (response.status === 404) {
-    return null;
+  for (const item of draftItems) {
+    const pending = pendingImageFiles.get(item.id);
+    if (!pending) {
+      continue;
+    }
+
+    const contentBase64 = await fileToBase64(pending.file);
+    await putRepoFile({
+      owner,
+      repo,
+      branch,
+      token,
+      path: pending.repoPath,
+      contentBase64,
+      message: `Upload item image for ${item.title || "catalog item"}`
+    });
+
+    item.image = pending.repoPath;
+    clearPendingImage(item.id);
+    uploaded += 1;
   }
 
-  const data = await parseJsonSafe(response);
-  if (!response.ok) {
-    const message = data?.message || `Could not read ${PUBLISH_PATH} (HTTP ${response.status}).`;
-    throw new Error(message);
-  }
-
-  return data?.sha || null;
+  return uploaded;
 }
 
 async function publishDraftLive(event) {
@@ -350,37 +592,35 @@ async function publishDraftLive(event) {
   savePublishSettings(settings);
 
   try {
-    const sha = await fetchExistingItemsFileSha(owner, repo, branch, token);
-    const content = toBase64Utf8(`${JSON.stringify(draftItems, null, 2)}\n`);
-    const commitMessage = `Update catalog items (${new Date().toISOString()})`;
-    const payload = {
-      message: commitMessage,
-      content,
-      branch
-    };
-
-    if (sha) {
-      payload.sha = sha;
+    const pendingCount = countPendingImages();
+    if (pendingCount > 0) {
+      showMessage(`Uploading ${pendingCount} image(s)...`);
     }
 
-    const publishUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${PUBLISH_PATH}`;
-    const response = await fetch(publishUrl, {
-      method: "PUT",
-      headers: githubHeaders(token),
-      body: JSON.stringify(payload)
+    const uploadedCount = await uploadPendingImages(owner, repo, branch, token);
+    if (uploadedCount > 0) {
+      saveDraftToStorage();
+      renderItems();
+    }
+
+    const catalogPayload = draftItems.map(toCatalogItem);
+    const content = toBase64Utf8(`${JSON.stringify(catalogPayload, null, 2)}\n`);
+    const data = await putRepoFile({
+      owner,
+      repo,
+      branch,
+      token,
+      path: PUBLISH_PATH,
+      contentBase64: content,
+      message: `Update catalog items (${new Date().toISOString()})`
     });
 
-    const data = await parseJsonSafe(response);
-    if (!response.ok) {
-      const message = data?.message || `Publish failed (HTTP ${response.status}).`;
-      throw new Error(message);
-    }
-
     const commitUrl = data?.commit?.html_url;
+    const imageText = uploadedCount > 0 ? ` Uploaded ${uploadedCount} image(s).` : "";
     if (commitUrl) {
-      showMessage(`Published. Commit created: ${commitUrl}. Site should refresh in about 30-90 seconds.`);
+      showMessage(`Published.${imageText} Commit: ${commitUrl}. Site refreshes in about 30-90 seconds.`);
     } else {
-      showMessage("Published. GitHub Pages should refresh in about 30-90 seconds.");
+      showMessage(`Published.${imageText} Site refreshes in about 30-90 seconds.`);
     }
 
     if (!rememberToken) {
@@ -423,6 +663,7 @@ function bindEvents() {
   if (reloadBtn) {
     reloadBtn.addEventListener("click", async () => {
       try {
+        draftItems.forEach((item) => clearPendingImage(item.id));
         await loadItemsFromSite();
         renderItems();
         showMessage("Reloaded draft from live data/items.json.");

@@ -57,8 +57,15 @@
           </label>
 
           <label class="form-field">
-            <span>Image Path (optional)</span>
-            <input id="image" name="image" type="text" placeholder="assets/items/drill-set.jpg">
+            <span>Image Upload (optional)</span>
+            <input id="imageFile" name="imageFile" type="file" accept="image/*">
+            <small class="field-help">Pick a photo from your device. It uploads when you click Publish Live.</small>
+          </label>
+
+          <label class="form-field">
+            <span>Image URL/Path (optional)</span>
+            <input id="image" name="image" type="text" placeholder="https://... or assets/items/drill-set.jpg">
+            <small class="field-help">Advanced: use this only if you already host the image somewhere.</small>
           </label>
 
           <label class="form-field form-span-2">
