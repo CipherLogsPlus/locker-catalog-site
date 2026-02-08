@@ -202,6 +202,21 @@ function getPublishPayloadFromForm() {
   return { owner, repo, branch, token, rememberToken };
 }
 
+function hasUnsavedItemFormInput() {
+  const title = String(document.getElementById("title")?.value || "").trim();
+  const price = String(document.getElementById("price")?.value || "").trim();
+  const category = String(document.getElementById("category")?.value || "").trim();
+  const condition = String(document.getElementById("condition")?.value || "").trim();
+  const status = String(document.getElementById("status")?.value || "").trim();
+  const image = String(document.getElementById("image")?.value || "").trim();
+  const mediaLabel = String(document.getElementById("mediaLabel")?.value || "").trim();
+  const note = String(document.getElementById("note")?.value || "").trim();
+  const imageFileInput = document.getElementById("imageFile");
+  const hasFile = imageFileInput instanceof HTMLInputElement && Boolean(imageFileInput.files && imageFileInput.files.length > 0);
+
+  return Boolean(title || price || category || condition || status || image || mediaLabel || note || hasFile);
+}
+
 function toBase64Utf8(content) {
   const bytes = new TextEncoder().encode(content);
   let binary = "";
@@ -581,6 +596,11 @@ async function publishDraftLive(event) {
 
   if (!owner || !repo || !branch || !token) {
     showMessage("Owner, repository, branch, and token are required to publish.");
+    return;
+  }
+
+  if (hasUnsavedItemFormInput()) {
+    showMessage("You have item details still in the form. Click Add Item first, then publish.");
     return;
   }
 
