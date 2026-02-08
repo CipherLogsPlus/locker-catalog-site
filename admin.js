@@ -213,8 +213,9 @@ function hasUnsavedItemFormInput() {
   const note = String(document.getElementById("note")?.value || "").trim();
   const imageFileInput = document.getElementById("imageFile");
   const hasFile = imageFileInput instanceof HTMLInputElement && Boolean(imageFileInput.files && imageFileInput.files.length > 0);
+  const hasCustomStatus = Boolean(status && status.toLowerCase() !== "available");
 
-  return Boolean(title || price || category || condition || status || image || mediaLabel || note || hasFile);
+  return Boolean(title || price || category || condition || image || mediaLabel || note || hasFile || hasCustomStatus);
 }
 
 function toBase64Utf8(content) {
