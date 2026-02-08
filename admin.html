@@ -25,7 +25,7 @@
       <section class="catalog-header">
         <p class="eyebrow">Catalog Admin</p>
         <h1>Add New Items Fast</h1>
-        <p class="lead">Build your item list here, download `items.json`, replace `data/items.json`, then run `git push`.</p>
+        <p class="lead">Build your item list here and click `Publish Live to Website` to update the catalog.</p>
       </section>
 
       <section class="admin-panel">
@@ -91,7 +91,46 @@
       </section>
 
       <section class="admin-panel">
-        <h2>Publish Steps</h2>
+        <h2>Publish Live</h2>
+        <p class="admin-help">This button commits your `data/items.json` directly to GitHub so the website updates automatically.</p>
+
+        <form id="publishForm" class="publish-form" autocomplete="off">
+          <label class="form-field">
+            <span>GitHub Owner</span>
+            <input id="publishOwner" name="owner" type="text" value="CipherLogsPlus" required>
+          </label>
+
+          <label class="form-field">
+            <span>Repository</span>
+            <input id="publishRepo" name="repo" type="text" value="locker-catalog-site" required>
+          </label>
+
+          <label class="form-field">
+            <span>Branch</span>
+            <input id="publishBranch" name="branch" type="text" value="main" required>
+          </label>
+
+          <label class="form-field">
+            <span>GitHub Token (Contents: Read & Write)</span>
+            <input id="publishToken" name="token" type="password" required>
+          </label>
+
+          <label class="remember-field form-span-2">
+            <input id="rememberToken" name="rememberToken" type="checkbox">
+            <span>Remember token in this browser (less secure)</span>
+          </label>
+
+          <div class="admin-actions form-span-2">
+            <button type="submit" class="primary-btn" id="publishBtn">Publish Live to Website</button>
+            <button type="button" class="ghost-btn" id="clearTokenBtn">Clear Saved Token</button>
+          </div>
+        </form>
+
+        <p class="admin-note">After publishing, GitHub Pages usually updates in about 30-90 seconds.</p>
+      </section>
+
+      <section class="admin-panel">
+        <h2>Fallback Publish Steps</h2>
         <ol class="publish-steps">
           <li>Download the JSON file from this page.</li>
           <li>Replace `data/items.json` in your local project folder.</li>

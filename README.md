@@ -12,12 +12,21 @@ Open:
 - Local: `http://localhost:8080/admin.html`
 - Live: `https://cipherlogsplus.github.io/locker-catalog-site/admin.html`
 
-Workflow:
+Fast workflow (no local git commands):
 1. Add items in `admin.html`.
-2. Click `Download items.json`.
-3. Replace the file at `data/items.json` with the downloaded file.
-4. Add photos to `assets/items/` and set `image` paths like `assets/items/tv.jpg`.
-5. Run:
+2. In `Publish Live`, enter your GitHub token and click `Publish Live to Website`.
+3. Wait about 30-90 seconds for GitHub Pages to rebuild.
+
+Token requirements:
+- Fine-grained PAT
+- Repository access: `CipherLogsPlus/locker-catalog-site`
+- Permission: `Contents` = `Read and Write`
+
+Fallback workflow (manual git):
+1. Click `Download items.json`.
+2. Replace the file at `data/items.json` with the downloaded file.
+3. Add photos to `assets/items/` and set `image` paths like `assets/items/tv.jpg`.
+4. Run:
    - `git add .`
    - `git commit -m "Update catalog"`
    - `git push`

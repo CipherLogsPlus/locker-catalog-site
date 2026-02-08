@@ -1,4 +1,6 @@
 const STORE_KEY = "locker_catalog_admin_items";
+const PUBLISH_SETTINGS_KEY = "locker_catalog_publish_settings";
+const PUBLISH_PATH = "data/items.json";
 
 let draftItems = [];
 
@@ -54,6 +56,133 @@ function loadDraftFromStorage() {
   }
 
   return false;
+}
+
+function deriveGitHubDefaults() {
+  const hostname = window.location.hostname;
+  const pathParts = window.location.pathname.split("/").filter(Boolean);
+
+  if (hostname.endsWith(".github.io")) {
+    const owner = hostname.replace(".github.io", "");
+    const repo = pathParts[0] || "locker-catalog-site";
+    return { owner, repo, branch: "main" };
+  }
+
+  return {
+    owner: "CipherLogsPlus",
+    repo: "locker-catalog-site",
+    branch: "main"
+  };
+}
+
+function loadPublishSettings() {
+  const defaults = deriveGitHubDefaults();
+  const raw = localStorage.getItem(PUBLISH_SETTINGS_KEY);
+  if (!raw) {
+    return {
+      owner: defaults.owner,
+      repo: defaults.repo,
+      branch: defaults.branch,
+      token: "",
+      rememberToken: false
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      owner: parsed.owner || defaults.owner,
+      repo: parsed.repo || defaults.repo,
+      branch: parsed.branch || defaults.branch,
+      token: parsed.token || "",
+      rememberToken: Boolean(parsed.rememberToken)
+    };
+  } catch (error) {
+    return {
+      owner: defaults.owner,
+      repo: defaults.repo,
+      branch: defaults.branch,
+      token: "",
+      rememberToken: false
+    };
+  }
+}
+
+function savePublishSettings(settings) {
+  localStorage.setItem(
+    PUBLISH_SETTINGS_KEY,
+    JSON.stringify({
+      owner: settings.owner,
+      repo: settings.repo,
+      branch: settings.branch,
+      token: settings.rememberToken ? settings.token : "",
+      rememberToken: Boolean(settings.rememberToken)
+    })
+  );
+}
+
+function clearSavedToken() {
+  const settings = loadPublishSettings();
+  settings.token = "";
+  settings.rememberToken = false;
+  savePublishSettings(settings);
+}
+
+function fillPublishForm() {
+  const settings = loadPublishSettings();
+  const ownerInput = document.getElementById("publishOwner");
+  const repoInput = document.getElementById("publishRepo");
+  const branchInput = document.getElementById("publishBranch");
+  const tokenInput = document.getElementById("publishToken");
+  const rememberInput = document.getElementById("rememberToken");
+
+  if (!ownerInput || !repoInput || !branchInput || !tokenInput || !rememberInput) {
+    return;
+  }
+
+  ownerInput.value = settings.owner;
+  repoInput.value = settings.repo;
+  branchInput.value = settings.branch;
+  tokenInput.value = settings.token;
+  rememberInput.checked = settings.rememberToken;
+}
+
+function getPublishPayloadFromForm() {
+  const owner = String(document.getElementById("publishOwner")?.value || "").trim();
+  const repo = String(document.getElementById("publishRepo")?.value || "").trim();
+  const branch = String(document.getElementById("publishBranch")?.value || "").trim();
+  const token = String(document.getElementById("publishToken")?.value || "").trim();
+  const rememberToken = Boolean(document.getElementById("rememberToken")?.checked);
+
+  return { owner, repo, branch, token, rememberToken };
+}
+
+function toBase64Utf8(content) {
+  const bytes = new TextEncoder().encode(content);
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+
+  return btoa(binary);
+}
+
+function githubHeaders(token) {
+  return {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${token}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+    "Content-Type": "application/json"
+  };
+}
+
+async function parseJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
 }
 
 async function loadItemsFromSite() {
@@ -166,7 +295,7 @@ function removeItem(index) {
 }
 
 function downloadDraftJson() {
-  const output = JSON.stringify(draftItems, null, 2);
+  const output = `${JSON.stringify(draftItems, null, 2)}\n`;
   const blob = new Blob([output], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -178,17 +307,113 @@ function downloadDraftJson() {
   link.remove();
 
   URL.revokeObjectURL(url);
-  showMessage("Downloaded items.json. Replace data/items.json in the repo, then git push.");
+  showMessage("Downloaded items.json. You can publish with the button below or via git push.");
+}
+
+async function fetchExistingItemsFileSha(owner, repo, branch, token) {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${PUBLISH_PATH}?ref=${encodeURIComponent(branch)}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: githubHeaders(token)
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await parseJsonSafe(response);
+  if (!response.ok) {
+    const message = data?.message || `Could not read ${PUBLISH_PATH} (HTTP ${response.status}).`;
+    throw new Error(message);
+  }
+
+  return data?.sha || null;
+}
+
+async function publishDraftLive(event) {
+  event.preventDefault();
+
+  const publishButton = document.getElementById("publishBtn");
+  const settings = getPublishPayloadFromForm();
+  const { owner, repo, branch, token, rememberToken } = settings;
+
+  if (!owner || !repo || !branch || !token) {
+    showMessage("Owner, repository, branch, and token are required to publish.");
+    return;
+  }
+
+  if (publishButton) {
+    publishButton.disabled = true;
+    publishButton.textContent = "Publishing...";
+  }
+
+  savePublishSettings(settings);
+
+  try {
+    const sha = await fetchExistingItemsFileSha(owner, repo, branch, token);
+    const content = toBase64Utf8(`${JSON.stringify(draftItems, null, 2)}\n`);
+    const commitMessage = `Update catalog items (${new Date().toISOString()})`;
+    const payload = {
+      message: commitMessage,
+      content,
+      branch
+    };
+
+    if (sha) {
+      payload.sha = sha;
+    }
+
+    const publishUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${PUBLISH_PATH}`;
+    const response = await fetch(publishUrl, {
+      method: "PUT",
+      headers: githubHeaders(token),
+      body: JSON.stringify(payload)
+    });
+
+    const data = await parseJsonSafe(response);
+    if (!response.ok) {
+      const message = data?.message || `Publish failed (HTTP ${response.status}).`;
+      throw new Error(message);
+    }
+
+    const commitUrl = data?.commit?.html_url;
+    if (commitUrl) {
+      showMessage(`Published. Commit created: ${commitUrl}. Site should refresh in about 30-90 seconds.`);
+    } else {
+      showMessage("Published. GitHub Pages should refresh in about 30-90 seconds.");
+    }
+
+    if (!rememberToken) {
+      const tokenInput = document.getElementById("publishToken");
+      if (tokenInput instanceof HTMLInputElement) {
+        tokenInput.value = "";
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not publish. Check repo settings and token scope.";
+    showMessage(`Publish failed: ${message}`);
+  } finally {
+    if (publishButton) {
+      publishButton.disabled = false;
+      publishButton.textContent = "Publish Live to Website";
+    }
+  }
 }
 
 function bindEvents() {
   const form = document.getElementById("itemForm");
+  const publishForm = document.getElementById("publishForm");
   const list = document.getElementById("itemList");
   const downloadBtn = document.getElementById("downloadBtn");
   const reloadBtn = document.getElementById("reloadBtn");
+  const clearTokenBtn = document.getElementById("clearTokenBtn");
 
   if (form) {
     form.addEventListener("submit", addItemFromForm);
+  }
+
+  if (publishForm) {
+    publishForm.addEventListener("submit", publishDraftLive);
   }
 
   if (downloadBtn) {
@@ -204,6 +429,21 @@ function bindEvents() {
       } catch (error) {
         showMessage("Could not reload from site. Try again in a moment.");
       }
+    });
+  }
+
+  if (clearTokenBtn) {
+    clearTokenBtn.addEventListener("click", () => {
+      clearSavedToken();
+      const tokenInput = document.getElementById("publishToken");
+      const rememberInput = document.getElementById("rememberToken");
+      if (tokenInput instanceof HTMLInputElement) {
+        tokenInput.value = "";
+      }
+      if (rememberInput instanceof HTMLInputElement) {
+        rememberInput.checked = false;
+      }
+      showMessage("Saved token cleared from this browser.");
     });
   }
 
@@ -227,6 +467,7 @@ function bindEvents() {
 async function initAdmin() {
   setYear();
   setActiveNavLink();
+  fillPublishForm();
   bindEvents();
 
   const restored = loadDraftFromStorage();
