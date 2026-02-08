@@ -1,15 +1,5 @@
 [
   {
-    "title": "Used Sock",
-    "price": "$500",
-    "category": "Clothing",
-    "condition": "Used",
-    "status": "Available",
-    "note": "Used Sock from 2017",
-    "mediaLabel": "Used Sock",
-    "image": "/home/cipher/Downloads/DirtySock.jpg"
-  },
-  {
     "title": "Vintage Oak Dresser",
     "price": "$120",
     "category": "Furniture",
